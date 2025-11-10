@@ -1,0 +1,85 @@
+name: Simple Build and Push Docker Image
+
+# Simple workflow that just builds the uberjar and pushes to Docker Hub
+# No artifact caching, no health checks, no complexity - just build and push
+
+on:
+  workflow_dispatch:
+    inputs:
+      edition:
+        description: 'Edition to build (ee or oss)'
+        required: true
+        default: 'ee'
+        type: choice
+        options:
+          - ee
+          - oss
+      docker_tag:
+        description: 'Docker tag (e.g., custom-build, dev-test, etc.)'
+        required: true
+        default: 'latest'
+      docker_repo:
+        description: 'Docker repository (e.g., your-username/metabase)'
+        required: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build uberjar
+        env:
+          MB_EDITION: ${{ inputs.edition }}
+          INTERACTIVE: false
+        run: ./bin/build.sh
+
+      - name: Move jar to docker context
+        run: |
+          mkdir -p bin/docker
+          cp target/uberjar/metabase.jar bin/docker/metabase.jar
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: bin/docker/.
+          push: true
+          tags: ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
+          build-args: |
+            GIT_COMMIT_SHA=${{ github.sha }}
+          platforms: linux/amd64
+          network: host
+          no-cache: true
+
+      - name: Output success message
+        run: |
+          echo "✅ Successfully built and pushed image!"
+          echo "Image: ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}"
+          echo ""
+          echo "Pull it with:"
+          echo "docker pull ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}"
