@@ -67,6 +67,13 @@ jobs:
           mkdir -p bin/docker
           cp target/uberjar/metabase.jar bin/docker/metabase.jar
 
+      - name: Upload jar as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: metabase-${{ inputs.edition }}-${{ github.sha }}-uberjar
+          path: target/uberjar/metabase.jar
+          retention-days: 7
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

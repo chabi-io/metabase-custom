@@ -1,0 +1,70 @@
+name: Push Existing Build to Docker
+
+# Use this workflow to retry Docker push after a successful build
+# This workflow downloads the artifact from a previous build and pushes it to Docker Hub
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_name:
+        description: 'Artifact name (e.g., metabase-ee-abc123-uberjar)'
+        required: true
+      docker_repo:
+        description: 'Docker repository (e.g., cgins0023/metabase)'
+        required: true
+      docker_tag:
+        description: 'Docker tag (e.g., latest, v1.0)'
+        required: true
+        default: 'latest'
+      commit_sha:
+        description: 'Git commit SHA (for build args)'
+        required: true
+
+jobs:
+  push-to-docker:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ./
+
+      - name: Prepare docker context
+        run: |
+          mkdir -p bin/docker
+          mv metabase.jar bin/docker/metabase.jar
+          ls -lh bin/docker/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: bin/docker/.
+          push: true
+          tags: ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
+          build-args: |
+            GIT_COMMIT_SHA=${{ inputs.commit_sha }}
+          platforms: linux/amd64
+          network: host
+          no-cache: true
+
+      - name: Success message
+        run: |
+          echo "✅ Successfully pushed image!"
+          echo "Image: ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}"
+          echo ""
+          echo "Pull it with:"
+          echo "docker pull ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}"
