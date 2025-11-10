@@ -156,7 +156,7 @@ export function ExtendedDateFilterPicker({
   if (error || !fiscalData || !currentYearData) {
     return (
       <div className={Styles.errorContainer}>
-        <Alert color="red" title={t`Failed to load fiscal calendar`}>
+        <Alert color="error" title={t`Failed to load fiscal calendar`}>
           {error?.message || t`Unable to load fiscal calendar data`}
         </Alert>
         <Button mt="md" onClick={refetch}>

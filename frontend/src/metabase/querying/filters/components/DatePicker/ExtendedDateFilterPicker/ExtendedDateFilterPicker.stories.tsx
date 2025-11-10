@@ -27,8 +27,8 @@ function ExtendedDateFilterPickerDemo() {
     <div style={{ width: "100%", minHeight: "100vh", padding: 24 }}>
       <ExtendedDateFilterPicker
         value={value}
-        onChange={setValue}
-        onApply={setValue}
+        onChange={(v) => setValue(v ?? undefined)}
+        onApply={(v) => setValue(v ?? undefined)}
       />
 
       {value && (
