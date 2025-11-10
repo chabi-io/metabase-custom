@@ -19,6 +19,15 @@ on:
       commit_sha:
         description: 'Git commit SHA (for build args)'
         required: true
+      platform:
+        description: 'Platform to build for'
+        required: true
+        default: 'linux/amd64,linux/arm64'
+        type: choice
+        options:
+          - linux/amd64,linux/arm64
+          - linux/amd64
+          - linux/arm64
 
 jobs:
   push-to-docker:
@@ -40,6 +49,10 @@ jobs:
           mv metabase.jar bin/docker/metabase.jar
           ls -lh bin/docker/
 
+      - name: Set up QEMU (for ARM builds)
+        if: contains(inputs.platform, 'arm')
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -57,7 +70,7 @@ jobs:
           tags: ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
           build-args: |
             GIT_COMMIT_SHA=${{ inputs.commit_sha }}
-          platforms: linux/amd64
+          platforms: ${{ inputs.platform }}
           network: host
           no-cache: true
 
