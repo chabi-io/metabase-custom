@@ -1,0 +1,55 @@
+/* Month Card - Calendar month display with fiscal periods */
+
+.monthCard {
+  border: 1px solid var(--mb-color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--mb-color-bg-white);
+}
+
+/* Header */
+.header {
+  background: var(--mb-color-bg-light);
+  padding: 12px;
+  border-bottom: 1px solid var(--mb-color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Day headers (Mon, Tue, Wed, etc.) */
+.dayHeaders {
+  display: grid;
+  grid-template-columns: 60px repeat(7, 1fr);
+  background: var(--mb-color-bg-medium);
+  border-bottom: 1px solid var(--mb-color-border);
+}
+
+.weekHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mb-color-text-medium);
+  background: var(--mb-color-bg-light);
+  border-right: 1px solid var(--mb-color-border);
+}
+
+.dayHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mb-color-text-medium);
+  text-align: center;
+}
+
+/* Week rows container */
+.weeks {
+  display: flex;
+  flex-direction: column;
+}
