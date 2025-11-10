@@ -33,7 +33,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: ".nvmrc"
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -41,8 +41,20 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      - name: Install Clojure CLI
+        run: |
+          curl -O https://download.clojure.org/install/linux-install-1.12.0.1488.sh
+          sudo bash ./linux-install-1.12.0.1488.sh
+
+      - name: Fetch CI config
+        run: |
+          curl -o ci-test-config.json https://raw.githubusercontent.com/metabase/metabase/refs/heads/master/ci-test-config.json
+
       - name: Install frontend dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --prefer-offline
+
+      - name: Patch frontend dependencies
+        run: yarn patch-package
 
       - name: Build uberjar
         env:
