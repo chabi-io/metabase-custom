@@ -1,488 +1,298 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "ttag";
 
-import type { SpecificDatePickerValue } from "metabase/querying/filters/types";
-import { Button, Divider, Group, Select, Switch, Text } from "metabase/ui";
-
-import { DateRangePicker } from "../SpecificDatePicker/DateRangePicker/DateRangePicker";
-import type { DateRangePickerValue } from "../SpecificDatePicker/DateRangePicker/types";
+import { Alert, Button, Group, Loader, Text } from "metabase/ui";
 
 import Styles from "./ExtendedDateFilterPicker.module.css";
-import type { ExtendedDateFilterPickerProps } from "./types";
-import {
-  buildQuarterOption,
-  formatDateRange,
-  getCurrentYearAndQuarter,
-  getPeriodDateRange,
-  getPeriodOptions,
-  getQuarterOnlyOptions,
-  getYearOptions,
-} from "./utils";
+import { FiscalCalendarGrid } from "./components/FiscalCalendarGrid";
+import { FiscalCalendarHeader } from "./components/FiscalCalendarHeader";
+import { SelectionToolbar } from "./components/SelectionToolbar";
+import { useDateSelection } from "./hooks/useDateSelection";
+import { useFiscalCalendarCardDiscovery } from "./hooks/useFiscalCalendarCardDiscovery";
+import { useFiscalCalendarData } from "./hooks/useFiscalCalendarData";
+import type {
+  ExtendedDateFilterPickerProps,
+  FiscalWeek,
+  ViewMode,
+} from "./types";
+import { getCurrentFiscalYear, getWeeksForView } from "./utils";
 
 export function ExtendedDateFilterPicker({
   value,
-  onChange,
   onApply,
   onBack,
   readOnly = false,
 }: ExtendedDateFilterPickerProps) {
-  // Persist extended mode state in localStorage
-  const [isExtendedMode, setIsExtendedMode] = useState(() => {
-    try {
-      return (
-        localStorage.getItem("metabase-extended-date-filter-mode") === "true"
-      );
-    } catch {
-      return false;
-    }
+  // Navigation state - initialize with current calendar year, will update once data loads
+  const [fiscalYear, setFiscalYear] = useState(() => new Date().getFullYear());
+  const [viewMode, setViewMode] = useState<ViewMode>("Year");
+
+  // Track previous value to detect external clears
+  const prevValueRef = useRef(value);
+  // Track if we've initialized from the current value
+  const initializedFromValueRef = useRef(false);
+  // Track last clicked week for shift-click range selection
+  const lastClickedWeekRef = useRef<number | null>(null);
+
+  // Discover fiscal calendar card
+  const {
+    cardId,
+    isLoading: isDiscovering,
+    error: discoveryError,
+  } = useFiscalCalendarCardDiscovery();
+
+  // Data fetching
+  const {
+    data: fiscalData,
+    loading: isLoadingData,
+    error: dataError,
+    refetch,
+  } = useFiscalCalendarData({
+    cardId,
   });
 
-  // Initialize from existing value if available
-  const initialRange =
-    value?.values.length === 2
-      ? ([value.values[0], value.values[1]] as [Date, Date])
-      : [new Date(), new Date()];
+  const loading = isDiscovering || isLoadingData;
+  const error = discoveryError || dataError;
 
-  // Extended mode state (only used when isExtendedMode is true)
-  const yearOptions = useMemo(() => getYearOptions(), []);
-  const quarterOnlyOptions = useMemo(() => getQuarterOnlyOptions(), []);
-
-  const [selectedYear, setSelectedYear] = useState<number>(() => {
-    if (value?.values.length === 2) {
-      return value.values[0].getFullYear();
-    }
-    return getCurrentYearAndQuarter().year;
-  });
-
-  const [selectedQuarterNum, setSelectedQuarterNum] = useState<number>(() => {
-    if (value?.values.length === 2) {
-      const month = value.values[0].getMonth();
-      return Math.floor(month / 3) + 1;
-    }
-    return getCurrentYearAndQuarter().quarter;
-  });
-
-  // Build current quarter option from year and quarter
-  const selectedQuarter = useMemo(
-    () => buildQuarterOption(selectedYear, selectedQuarterNum),
-    [selectedYear, selectedQuarterNum],
-  );
-
-  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
-  const [rangeStart, setRangeStart] = useState<Date | null>(null);
-  const [dateRange, setDateRange] = useState<[Date, Date]>(initialRange);
-
-  const periodOptions = getPeriodOptions();
-
-  // Handle toggle change and persist state
-  const handleToggleChange = (checked: boolean) => {
-    setIsExtendedMode(checked);
-    try {
-      localStorage.setItem(
-        "metabase-extended-date-filter-mode",
-        checked.toString(),
-      );
-    } catch {
-      // Ignore localStorage errors
-    }
-  };
-
-  // Conversion utilities
-  const toDateRangePickerValue = (
-    specificValue: SpecificDatePickerValue | null,
-  ): DateRangePickerValue => {
-    if (specificValue?.values.length === 2) {
-      return {
-        dateRange: [specificValue.values[0], specificValue.values[1]],
-        hasTime: specificValue.hasTime || false,
-      };
-    }
-    return {
-      dateRange: [new Date(), new Date()],
-      hasTime: false,
-    };
-  };
-
-  const fromDateRangePickerValue = (
-    rangeValue: DateRangePickerValue,
-  ): SpecificDatePickerValue => {
-    return {
-      type: "specific",
-      operator: "between",
-      values: rangeValue.dateRange,
-      hasTime: rangeValue.hasTime,
-    };
-  };
-
-  // Standard date range picker handlers
-  const handleStandardDateRangeChange = (rangeValue: DateRangePickerValue) => {
-    const newValue = fromDateRangePickerValue(rangeValue);
-    onChange(newValue);
-  };
-
-  const handleStandardSubmit = () => {
-    if (onApply && value) {
-      onApply(value);
-    }
-  };
-
-  // Helper to call the appropriate callback for extended mode
-  const handleValueChange = (newValue: SpecificDatePickerValue) => {
-    // Always update internal state
-    onChange(newValue);
-    // If onApply is provided (parameter widget context), also call it to apply the filter
-    if (onApply) {
-      onApply(newValue);
-    }
-  };
-
-  // Extended mode handlers
-  const handleYearChange = (year: string | null) => {
-    if (!year) {
-      return;
-    }
-
-    const yearNum = parseInt(year, 10);
-    setSelectedYear(yearNum);
-    updateQuarterSelection(yearNum, selectedQuarterNum);
-  };
-
-  const handleQuarterChange = (quarter: string | null) => {
-    if (!quarter) {
-      return;
-    }
-
-    const quarterNum = parseInt(quarter, 10);
-    setSelectedQuarterNum(quarterNum);
-    updateQuarterSelection(selectedYear, quarterNum);
-  };
-
-  const updateQuarterSelection = (year: number, quarterNum: number) => {
-    // Reset other selections when quarter/year changes
-    setSelectedPeriod(null);
-    setRangeStart(null);
-
-    const quarter = buildQuarterOption(year, quarterNum);
-
-    // Set default range to the full quarter for visual feedback
-    const newRange: [Date, Date] = [quarter.startDate, quarter.endDate];
-    setDateRange(newRange);
-
-    // Only update internal state - don't apply filter yet
-    // User can explore quarters without closing popup
-    const newValue: SpecificDatePickerValue = {
-      type: "specific",
-      operator: "between",
-      values: newRange,
-      hasTime: false,
-    };
-    onChange(newValue);
-  };
-
-  const handlePeriodChange = (period: string) => {
-    setSelectedPeriod(period);
-    const range = getPeriodDateRange(period, selectedQuarter);
-    const newRange: [Date, Date] = [range.start, range.end];
-    setDateRange(newRange);
-    setRangeStart(null);
-
-    // Immediately apply the period selection
-    const newValue: SpecificDatePickerValue = {
-      type: "specific",
-      operator: "between",
-      values: newRange,
-      hasTime: false,
-    };
-    handleValueChange(newValue);
-  };
-
-  const handleExtendedDateClick = (date: Date) => {
-    if (readOnly) {
-      return;
-    }
-
-    if (!rangeStart) {
-      // First click - start range
-      setRangeStart(date);
-      const newRange: [Date, Date] = [date, date];
-      setDateRange(newRange);
-      setSelectedPeriod(null);
-    } else {
-      // Second click - end range
-      const start = rangeStart < date ? rangeStart : date;
-      const end = rangeStart < date ? date : rangeStart;
-      const newRange: [Date, Date] = [start, end];
-      setDateRange(newRange);
-      setRangeStart(null);
-
-      // Apply the custom range selection
-      const newValue: SpecificDatePickerValue = {
-        type: "specific",
-        operator: "between",
-        values: newRange,
-        hasTime: false,
-      };
-      handleValueChange(newValue);
-    }
-  };
-
-  const renderCalendar = (month: Date, monthIndex: number) => {
-    const year = month.getFullYear();
-    const monthNum = month.getMonth();
-    const firstDay = new Date(year, monthNum, 1);
-    const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - firstDay.getDay());
-
-    const days = [];
-    const current = new Date(startDate);
-
-    // Generate 6 weeks of days
-    for (let week = 0; week < 6; week++) {
-      for (let day = 0; day < 7; day++) {
-        days.push(new Date(current));
-        current.setDate(current.getDate() + 1);
+  // Update fiscal year to actual current fiscal year once data loads
+  useEffect(() => {
+    if (fiscalData && !value) {
+      const currentFY = getCurrentFiscalYear(fiscalData);
+      if (currentFY !== fiscalYear) {
+        setFiscalYear(currentFY);
       }
     }
+  }, [fiscalData, fiscalYear, value]);
 
-    const today = new Date();
-    const todayStr = today.toDateString();
+  // Selection state
+  const {
+    selection,
+    dragState,
+    selectPeriods,
+    selectWeek,
+    selectWeekRange,
+    selectQuick,
+    selectCustomRange,
+    startDrag,
+    updateDrag,
+    endDrag,
+    clearSelection,
+  } = useDateSelection();
 
-    return (
-      <div key={monthIndex} className={Styles.monthCalendar}>
-        <div className={Styles.monthHeader}>
-          {month.toLocaleDateString("en-US", {
-            month: "long",
-            year: "numeric",
-          })}
-        </div>
+  // Sync selection with value prop
+  useEffect(() => {
+    if (!fiscalData) {
+      return;
+    }
 
-        <div className={Styles.weekdayHeader}>
-          {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
-            <div key={i} className={Styles.weekday}>
-              {day}
-            </div>
-          ))}
-        </div>
+    const prevValue = prevValueRef.current;
+    const valueChanged = prevValue !== value;
+    const valueCleared = prevValue && !value;
 
-        <div className={Styles.calendarDays}>
-          {days.map((day, i) => {
-            const isCurrentMonth = day.getMonth() === monthNum;
-            const isToday = day.toDateString() === todayStr;
-            const isSelected =
-              dateRange &&
-              (day.toDateString() === dateRange[0].toDateString() ||
-                day.toDateString() === dateRange[1].toDateString());
-            const isInRange =
-              dateRange &&
-              day >= dateRange[0] &&
-              day <= dateRange[1] &&
-              isCurrentMonth;
-            const isRangeStart =
-              dateRange && day.toDateString() === dateRange[0].toDateString();
-            const isRangeEnd =
-              dateRange && day.toDateString() === dateRange[1].toDateString();
+    if (value && value.values && value.values.length === 2) {
+      // Value prop has a selection - initialize only if value changed
+      if (valueChanged && !initializedFromValueRef.current) {
+        const [startDate, endDate] = value.values;
+        selectCustomRange(startDate, endDate, "Selected Range");
 
-            let className = Styles.day;
-            if (!isCurrentMonth) {
-              className += ` ${Styles.otherMonth}`;
-            }
-            if (isToday) {
-              className += ` ${Styles.today}`;
-            }
-            if (isSelected) {
-              className += ` ${Styles.selected}`;
-            }
-            if (isInRange && !isSelected) {
-              className += ` ${Styles.inRange}`;
-            }
-            if (isRangeStart) {
-              className += ` ${Styles.rangeStart}`;
-            }
-            if (isRangeEnd) {
-              className += ` ${Styles.rangeEnd}`;
-            }
-
-            return (
-              <button
-                key={i}
-                className={className}
-                onClick={() => handleExtendedDateClick(day)}
-                disabled={readOnly || !isCurrentMonth}
-              >
-                {day.getDate()}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  // Render standard DateRangePicker when toggle is off
-  if (!isExtendedMode) {
-    return (
-      <div className={Styles.container}>
-        {/* Mode Toggle */}
-        <Group justify="space-between" p="sm">
-          <Text fw={500}>{t`Date Range Selection`}</Text>
-          <Switch
-            label={t`Extended View`}
-            checked={isExtendedMode}
-            onChange={(event) =>
-              handleToggleChange(event.currentTarget.checked)
-            }
-            disabled={readOnly}
-          />
-        </Group>
-
-        <Divider />
-
-        {/* Use Original DateRangePicker */}
-        <DateRangePicker
-          value={toDateRangePickerValue(value)}
-          hasTimeToggle={false}
-          onChange={handleStandardDateRangeChange}
-          onSubmit={handleStandardSubmit}
-          renderSubmitButton={() =>
-            onBack ? (
-              <Group>
-                <Button variant="subtle" onClick={onBack} disabled={readOnly}>
-                  {t`Back`}
-                </Button>
-                <Button onClick={handleStandardSubmit} disabled={readOnly}>
-                  {t`Apply Filter`}
-                </Button>
-              </Group>
-            ) : (
-              <Button onClick={handleStandardSubmit} disabled={readOnly}>
-                {t`Apply Filter`}
-              </Button>
-            )
+        // Set fiscal year to the year containing the start date
+        for (const [year, yearData] of fiscalData.years.entries()) {
+          if (
+            startDate >= yearData.startDate &&
+            startDate <= yearData.endDate
+          ) {
+            setFiscalYear(year);
+            break;
           }
-        />
+        }
+        initializedFromValueRef.current = true;
+      }
+    } else if (valueCleared) {
+      // Value prop was cleared externally - clear our selection
+      clearSelection();
+      initializedFromValueRef.current = false;
+    } else if (!value) {
+      // No value - reset initialization flag
+      initializedFromValueRef.current = false;
+    }
+
+    prevValueRef.current = value;
+  }, [value, fiscalData, selectCustomRange, clearSelection]);
+
+  // Get current fiscal year data
+  const currentYearData = fiscalData?.years.get(fiscalYear);
+
+  // Get visible weeks based on view mode
+  const visibleWeeks = useMemo(() => {
+    if (!currentYearData) {
+      return [];
+    }
+    return getWeeksForView(currentYearData.weeks, viewMode);
+  }, [currentYearData, viewMode]);
+
+  // Global mouse up handler for drag
+  useEffect(() => {
+    const handleMouseUp = () => {
+      if (dragState.isDragging) {
+        endDrag();
+      }
+    };
+
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => document.removeEventListener("mouseup", handleMouseUp);
+  }, [dragState.isDragging, endDrag]);
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className={Styles.loadingContainer}>
+        <Loader size="lg" />
+        <Text mt="md">{t`Loading...`}</Text>
       </div>
     );
   }
 
-  // Extended mode render
+  // Error state
+  if (error || !fiscalData || !currentYearData) {
+    return (
+      <div className={Styles.errorContainer}>
+        <Alert color="red" title={t`Failed to load fiscal calendar`}>
+          {error?.message || t`Unable to load fiscal calendar data`}
+        </Alert>
+        <Button mt="md" onClick={refetch}>
+          {t`Retry`}
+        </Button>
+      </div>
+    );
+  }
+
+  const handleApply = () => {
+    if (!onApply) {
+      return;
+    }
+
+    if (selection) {
+      onApply({
+        type: "specific",
+        operator: "between",
+        values: [selection.startDate, selection.endDate],
+        hasTime: false,
+      });
+    } else {
+      // No selection means user cleared - apply null to remove filter
+      onApply(null);
+    }
+  };
+
+  const handleClear = () => {
+    // Just clear local state - don't apply yet
+    clearSelection();
+  };
+
+  const handleWeekClick = (week: FiscalWeek, event: React.MouseEvent) => {
+    if (
+      event.shiftKey &&
+      lastClickedWeekRef.current !== null &&
+      currentYearData
+    ) {
+      // Check if shift+clicking a boundary of the current range to shrink it
+      const currentRange = selection?.meta?.weekRange;
+      const isAtStartBoundary =
+        currentRange && week.weekNum === currentRange[0];
+      const isAtEndBoundary = currentRange && week.weekNum === currentRange[1];
+
+      if (isAtStartBoundary && currentRange[0] < currentRange[1]) {
+        // Shrink from start: move start forward by 1
+        selectWeekRange(
+          currentRange[0] + 1,
+          currentRange[1],
+          currentYearData.weeks,
+        );
+        lastClickedWeekRef.current = currentRange[1]; // Anchor stays at the other end
+      } else if (isAtEndBoundary && currentRange[1] > currentRange[0]) {
+        // Shrink from end: move end backward by 1
+        selectWeekRange(
+          currentRange[0],
+          currentRange[1] - 1,
+          currentYearData.weeks,
+        );
+        lastClickedWeekRef.current = currentRange[0]; // Anchor stays at the other end
+      } else {
+        // Normal shift+click: select range from last clicked week to current week
+        const startWeek = Math.min(lastClickedWeekRef.current, week.weekNum);
+        const endWeek = Math.max(lastClickedWeekRef.current, week.weekNum);
+        selectWeekRange(startWeek, endWeek, currentYearData.weeks);
+      }
+    } else {
+      // Check if clicking the exact same week that was last clicked
+      const isClickingSameWeek = lastClickedWeekRef.current === week.weekNum;
+
+      if (isClickingSameWeek) {
+        // Clicking the same week twice - deselect
+        clearSelection();
+        lastClickedWeekRef.current = null;
+      } else {
+        // Clicking a different week - select it (or update anchor point)
+        selectWeek(week);
+        lastClickedWeekRef.current = week.weekNum;
+      }
+    }
+  };
+
+  const applyButtonLabel = value ? t`Update filter` : t`Add filter`;
+
   return (
     <div className={Styles.container}>
-      {/* Mode Toggle */}
-      <Group justify="space-between" p="sm">
-        <Text fw={500}>{t`Date Range Selection`}</Text>
-        <Switch
-          label={t`Extended View`}
-          checked={isExtendedMode}
-          onChange={(event) => handleToggleChange(event.currentTarget.checked)}
-          disabled={readOnly}
-        />
-      </Group>
+      {/* Header with year navigation and view mode */}
+      <FiscalCalendarHeader
+        fiscalYear={fiscalYear}
+        viewMode={viewMode}
+        onYearChange={setFiscalYear}
+        onViewModeChange={setViewMode}
+        minYear={fiscalData.minYear}
+        maxYear={fiscalData.maxYear}
+        onBack={onBack}
+      />
 
-      <Divider />
+      {/* Selection toolbar */}
+      <SelectionToolbar
+        periods={currentYearData.periods}
+        weeks={currentYearData.weeks}
+        selection={selection}
+        viewMode={viewMode}
+        fiscalYear={fiscalYear}
+        fiscalData={fiscalData}
+        onSelectPeriods={selectPeriods}
+        onSelectWeekRange={selectWeekRange}
+        onSelectQuick={selectQuick}
+        onClearSelection={handleClear}
+        onApply={handleApply}
+        applyButtonLabel={applyButtonLabel}
+        readOnly={readOnly}
+      />
 
-      {/* Year and Quarter Selection */}
-      <div className={Styles.quarterSection}>
-        <div className={Styles.quarterTitle}>{t`Select Year & Quarter`}</div>
-        <div className={Styles.dropdownRow}>
-          <div
-            className={Styles.yearDropdown}
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onMouseUp={(e) => e.stopPropagation()}
-          >
-            <Select
-              className={Styles.yearSelect}
-              value={selectedYear.toString()}
-              onChange={handleYearChange}
-              data={yearOptions.map((y) => ({
-                value: y.value.toString(),
-                label: y.label,
-              }))}
-              disabled={readOnly}
-              withinPortal={false}
-              placeholder="Year"
-            />
-          </div>
-          <div
-            className={Styles.quarterDropdown}
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onMouseUp={(e) => e.stopPropagation()}
-          >
-            <Select
-              className={Styles.quarterSelect}
-              value={selectedQuarterNum.toString()}
-              onChange={handleQuarterChange}
-              data={quarterOnlyOptions.map((q) => ({
-                value: q.value.toString(),
-                label: q.label,
-              }))}
-              disabled={readOnly}
-              withinPortal={false}
-              placeholder="Quarter"
-            />
-          </div>
-        </div>
-      </div>
+      {/* Calendar grid */}
+      <FiscalCalendarGrid
+        weeks={visibleWeeks}
+        selection={selection}
+        dragState={dragState}
+        onWeekClick={handleWeekClick}
+        onDayMouseDown={startDrag}
+        onDayMouseMove={updateDrag}
+        readOnly={readOnly}
+      />
 
-      {/* Period Selection */}
-      <div className={Styles.periodSection}>
-        <div className={Styles.periodTitle}>{t`Quick Periods`}</div>
-        <div className={Styles.periodGrid}>
-          {periodOptions.map((period) => (
-            <button
-              key={period.value}
-              className={`${Styles.periodOption} ${
-                selectedPeriod === period.value ? Styles.selected : ""
-              }`}
-              onClick={() => handlePeriodChange(period.value)}
-              disabled={readOnly}
-            >
-              {period.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 3-Month Calendar */}
-      <div className={Styles.calendarSection}>
-        <div className={Styles.calendarTitle}>
-          {t`Select Date Range`}
-          <span className={Styles.dateRangeInfo}>
-            {formatDateRange(dateRange[0], dateRange[1])}
-          </span>
-        </div>
-
-        <div className={Styles.calendarGrid}>
-          {selectedQuarter.months.map((month, index) =>
-            renderCalendar(month, index),
+      {/* Actions - also at bottom for convenience */}
+      <Group className={Styles.actions} justify="space-between" mt="md">
+        <div>
+          {onBack && (
+            <Button variant="subtle" onClick={onBack}>
+              {t`Back`}
+            </Button>
           )}
         </div>
-      </div>
-
-      <Divider />
-
-      {/* Actions */}
-      <Group justify="space-between" p="sm">
-        {onBack && (
-          <Button variant="subtle" onClick={onBack} disabled={readOnly}>
-            {t`Back`}
-          </Button>
-        )}
-
-        <Button
-          onClick={() => {
-            const newValue: SpecificDatePickerValue = {
-              type: "specific",
-              operator: "between",
-              values: dateRange,
-              hasTime: false,
-            };
-            handleValueChange(newValue);
-          }}
-          disabled={readOnly}
-        >
-          {t`Apply Filter`}
+        <Button variant="filled" onClick={handleApply}>
+          {applyButtonLabel}
         </Button>
       </Group>
     </div>

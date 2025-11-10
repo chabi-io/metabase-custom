@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { match } from "ts-pattern";
 
 import { ExtendedDateFilterPicker } from "metabase/querying/filters/components/DatePicker/ExtendedDateFilterPicker";
@@ -12,26 +12,44 @@ import type { ParameterValueOrArray } from "metabase-types/api";
 
 type DateExtendedRangeWidgetProps = {
   value: ParameterValueOrArray | null | undefined;
-  onChange: (value: string) => void;
+  onChange: (value: string | null) => void;
 };
 
 export function DateExtendedRangeWidget({
   value,
   onChange,
 }: DateExtendedRangeWidgetProps) {
-  const [pickerValue, setPickerValue] = useState(
-    () => getPickerValue(value) ?? getPickerDefaultValue(),
-  );
+  const [pickerValue, setPickerValue] = useState<
+    SpecificDatePickerValue | undefined
+  >(() => getPickerValue(value) ?? getPickerDefaultValue());
+
+  // Sync internal state when external value changes (e.g., when "x" is clicked)
+  useEffect(() => {
+    const externalValue = getPickerValue(value);
+    if (!value) {
+      // Value was cleared externally
+      setPickerValue(undefined);
+    } else if (externalValue) {
+      // Value was set externally
+      setPickerValue(externalValue);
+    }
+  }, [value]);
 
   const handleChange = (value: SpecificDatePickerValue) => {
     // Only update internal state, don't call onChange yet
     setPickerValue(value);
   };
 
-  const handleApply = (value: SpecificDatePickerValue) => {
+  const handleApply = (value: SpecificDatePickerValue | null) => {
     // This is called when user actually wants to apply the filter
-    setPickerValue(value);
-    onChange(getWidgetValue(value));
+    if (value) {
+      setPickerValue(value);
+      onChange(getWidgetValue(value));
+    } else {
+      // Clear was clicked
+      setPickerValue(undefined);
+      onChange(null);
+    }
   };
 
   return (
@@ -39,7 +57,6 @@ export function DateExtendedRangeWidget({
       value={pickerValue}
       onChange={handleChange}
       onApply={handleApply}
-      onBack={() => {}}
       readOnly={false}
     />
   );

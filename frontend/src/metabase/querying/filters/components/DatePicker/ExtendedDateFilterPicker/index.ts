@@ -1,2 +1,2 @@
 export { ExtendedDateFilterPicker } from "./ExtendedDateFilterPicker";
-export type { ExtendedDateFilterPickerProps, QuarterOption } from "./types";
+export type { ExtendedDateFilterPickerProps } from "./types";

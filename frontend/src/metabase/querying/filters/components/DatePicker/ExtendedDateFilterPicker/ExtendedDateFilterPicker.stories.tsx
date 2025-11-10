@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
 
-import type { ExtendedDatePickerValue } from "metabase/querying/filters/types";
+import type { SpecificDatePickerValue } from "metabase/querying/filters/types";
 
 import { ExtendedDateFilterPicker } from "./ExtendedDateFilterPicker";
 
@@ -9,7 +9,7 @@ const meta: Meta<typeof ExtendedDateFilterPicker> = {
   title: "Components/ExtendedDateFilterPicker",
   component: ExtendedDateFilterPicker,
   parameters: {
-    layout: "centered",
+    layout: "fullscreen",
   },
 };
 
@@ -17,11 +17,19 @@ export default meta;
 type Story = StoryObj<typeof ExtendedDateFilterPicker>;
 
 function ExtendedDateFilterPickerDemo() {
-  const [value, setValue] = useState<ExtendedDatePickerValue | undefined>();
+  const [value, setValue] = useState<SpecificDatePickerValue | undefined>();
+
+  // Component automatically discovers fiscal calendar card at runtime
+  // Setup: Create saved question with [FISCAL_CALENDAR_SOURCE] in description
+  // See README.md for complete setup instructions
 
   return (
-    <div style={{ width: 800, height: 600 }}>
-      <ExtendedDateFilterPicker value={value} onChange={setValue} />
+    <div style={{ width: "100%", minHeight: "100vh", padding: 24 }}>
+      <ExtendedDateFilterPicker
+        value={value}
+        onChange={setValue}
+        onApply={setValue}
+      />
 
       {value && (
         <div
