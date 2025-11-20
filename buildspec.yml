@@ -1,0 +1,289 @@
+version: 0.2
+
+# Metabase Custom Build - Builds both EE and OSS editions
+# Pushes to ECR with version tags and latest tags
+
+env:
+  variables:
+    JAVA_VERSION: "21"
+    NODE_VERSION: "22"
+    CLOJURE_VERSION: "1.12.0.1488"
+    INTERACTIVE: "false"
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+      java: corretto21
+    commands:
+      - echo "Installing build dependencies..."
+      - echo "Node.js version"
+      - node --version
+      - npm --version
+      - echo "Installing Yarn"
+      - npm install -g yarn
+      - yarn --version
+      - echo "Installing Clojure CLI $CLOJURE_VERSION"
+      - curl -O https://download.clojure.org/install/linux-install-${CLOJURE_VERSION}.sh
+      - chmod +x linux-install-${CLOJURE_VERSION}.sh
+      - ./linux-install-${CLOJURE_VERSION}.sh
+      - clojure --version
+      - echo "Verifying Java"
+      - java -version
+      - echo "Verifying Docker"
+      - docker --version
+
+  pre_build:
+    commands:
+      - echo "Pre-build phase started on $(date)"
+      - echo "Current directory:"
+      - pwd
+      - ls -la
+
+      # Extract version information from git
+      - echo "Extracting version information..."
+      - |
+        # Get latest Metabase release from GitHub API
+        echo "Fetching latest Metabase version from GitHub..."
+        UPSTREAM_VERSION=$(curl -s https://api.github.com/repos/metabase/metabase/releases/latest | jq -r '.tag_name')
+        if [ -z "$UPSTREAM_VERSION" ] || [ "$UPSTREAM_VERSION" = "null" ]; then
+          echo "Failed to get version from GitHub API, falling back to git tags..."
+          git remote add upstream https://github.com/metabase/metabase.git 2>/dev/null || true
+          git fetch upstream --tags
+          # Get latest v0.x tag (Metabase's main versioning)
+          UPSTREAM_VERSION=$(git tag -l | grep -E '^v0\.[0-9]+\.[0-9]+(\.[0-9]+)?$' | sort -V | tail -1)
+        fi
+        if [ -z "$UPSTREAM_VERSION" ]; then
+          UPSTREAM_VERSION="v0.0.0"
+        fi
+        echo "Upstream Metabase version: $UPSTREAM_VERSION"
+
+        # Get short commit SHA
+        SHORT_SHA=$(git rev-parse --short=7 HEAD)
+        echo "Commit SHA: $SHORT_SHA"
+
+        # Get full commit SHA for build args
+        FULL_SHA=$(git rev-parse HEAD)
+        echo "Full SHA: $FULL_SHA"
+
+        # Get build date
+        BUILD_DATE=$(date +%Y-%m-%d)
+        echo "Build date: $BUILD_DATE"
+
+        # Generate Docker image tags
+        BASE_TAG="${UPSTREAM_VERSION}-custom-${SHORT_SHA}"
+        EE_TAG="${UPSTREAM_VERSION}-ee-custom-${SHORT_SHA}"
+        OSS_TAG="${UPSTREAM_VERSION}-oss-custom-${SHORT_SHA}"
+
+        echo "Base tag: $BASE_TAG"
+        echo "EE tag: $EE_TAG"
+        echo "OSS tag: $OSS_TAG"
+
+        # Export for use in later phases
+        export UPSTREAM_VERSION
+        export SHORT_SHA
+        export FULL_SHA
+        export BUILD_DATE
+        export BASE_TAG
+        export EE_TAG
+        export OSS_TAG
+
+      # Log in to ECR
+      - echo "Logging in to Amazon ECR..."
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPOSITORY_URI
+      - echo "ECR login successful"
+
+      # Log in to Docker Hub to avoid rate limits
+      - echo "Logging in to Docker Hub..."
+      - |
+        DOCKER_CREDS=$(aws secretsmanager get-secret-value --secret-id /codebuild/dockerhub/credentials --query SecretString --output text --region $AWS_DEFAULT_REGION)
+        DOCKER_USERNAME=$(echo $DOCKER_CREDS | jq -r '.username')
+        DOCKER_PASSWORD=$(echo $DOCKER_CREDS | jq -r '.password')
+        echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin
+        echo "Docker Hub login successful"
+
+  build:
+    commands:
+      - echo "Build phase started on $(date)"
+
+      # ============================================
+      # BUILD ENTERPRISE EDITION (EE)
+      # ============================================
+      - echo "=========================================="
+      - echo "Building ENTERPRISE EDITION (EE)"
+      - echo "=========================================="
+
+      - export MB_EDITION=ee
+      - echo "MB_EDITION=$MB_EDITION"
+
+      # Install frontend dependencies
+      - echo "Installing frontend dependencies..."
+      - yarn install --frozen-lockfile --prefer-offline
+      - yarn patch-package
+
+      # Build the uberjar
+      - echo "Building Metabase EE uberjar..."
+      - ./bin/build.sh
+
+      # Verify jar was created
+      - |
+        if [ ! -f "target/uberjar/metabase.jar" ]; then
+          echo "ERROR: metabase.jar not found!"
+          exit 1
+        fi
+      - ls -lh target/uberjar/metabase.jar
+
+      # Prepare Docker context
+      - echo "Preparing Docker build context for EE..."
+      - cp target/uberjar/metabase.jar bin/docker/metabase.jar
+      - ls -lh bin/docker/
+
+      # Build EE Docker image
+      - echo "Building EE Docker image..."
+      - |
+        docker build \
+          --build-arg GIT_COMMIT_SHA=$FULL_SHA \
+          --network host \
+          --no-cache \
+          -t $ECR_REPOSITORY_URI:$EE_TAG \
+          -t $ECR_REPOSITORY_URI:latest-ee \
+          bin/docker/
+
+      # Push EE images
+      - echo "Pushing EE Docker images to ECR..."
+      - docker push $ECR_REPOSITORY_URI:$EE_TAG
+      - docker push $ECR_REPOSITORY_URI:latest-ee
+      - echo "✅ EE images pushed successfully"
+
+      # Health check EE image
+      - echo "Running health check on EE image..."
+      - |
+        # Start container in background
+        CONTAINER_ID=$(docker run -d -p 3000:3000 $ECR_REPOSITORY_URI:$EE_TAG)
+        echo "Started container: $CONTAINER_ID"
+
+        # Wait for Metabase to start (max 2 minutes)
+        echo "Waiting for Metabase to start..."
+        for i in {1..60}; do
+          if curl -s http://localhost:3000/api/health | grep -q '"status":"ok"'; then
+            echo "✅ EE health check passed"
+            docker stop $CONTAINER_ID
+            break
+          fi
+          if [ $i -eq 60 ]; then
+            echo "❌ EE health check failed - timeout"
+            docker logs $CONTAINER_ID
+            docker stop $CONTAINER_ID
+            exit 1
+          fi
+          echo "Attempt $i/60..."
+          sleep 2
+        done
+
+      # ============================================
+      # BUILD OPEN SOURCE EDITION (OSS)
+      # ============================================
+      - echo "=========================================="
+      - echo "Building OPEN SOURCE EDITION (OSS)"
+      - echo "=========================================="
+
+      # Clean previous build
+      - echo "Cleaning previous build artifacts..."
+      - rm -f bin/docker/metabase.jar
+      - rm -rf target/
+
+      - export MB_EDITION=oss
+      - echo "MB_EDITION=$MB_EDITION"
+
+      # Frontend dependencies already installed, just rebuild
+      - echo "Building Metabase OSS uberjar..."
+      - ./bin/build.sh
+
+      # Verify jar was created
+      - |
+        if [ ! -f "target/uberjar/metabase.jar" ]; then
+          echo "ERROR: metabase.jar not found!"
+          exit 1
+        fi
+      - ls -lh target/uberjar/metabase.jar
+
+      # Prepare Docker context
+      - echo "Preparing Docker build context for OSS..."
+      - cp target/uberjar/metabase.jar bin/docker/metabase.jar
+      - ls -lh bin/docker/
+
+      # Build OSS Docker image
+      - echo "Building OSS Docker image..."
+      - |
+        docker build \
+          --build-arg GIT_COMMIT_SHA=$FULL_SHA \
+          --network host \
+          --no-cache \
+          -t $ECR_REPOSITORY_URI:$OSS_TAG \
+          -t $ECR_REPOSITORY_URI:latest-oss \
+          bin/docker/
+
+      # Push OSS images
+      - echo "Pushing OSS Docker images to ECR..."
+      - docker push $ECR_REPOSITORY_URI:$OSS_TAG
+      - docker push $ECR_REPOSITORY_URI:latest-oss
+      - echo "✅ OSS images pushed successfully"
+
+      # Health check OSS image
+      - echo "Running health check on OSS image..."
+      - |
+        # Start container in background
+        CONTAINER_ID=$(docker run -d -p 3001:3000 $ECR_REPOSITORY_URI:$OSS_TAG)
+        echo "Started container: $CONTAINER_ID"
+
+        # Wait for Metabase to start (max 2 minutes)
+        echo "Waiting for Metabase to start..."
+        for i in {1..60}; do
+          if curl -s http://localhost:3001/api/health | grep -q '"status":"ok"'; then
+            echo "✅ OSS health check passed"
+            docker stop $CONTAINER_ID
+            break
+          fi
+          if [ $i -eq 60 ]; then
+            echo "❌ OSS health check failed - timeout"
+            docker logs $CONTAINER_ID
+            docker stop $CONTAINER_ID
+            exit 1
+          fi
+          echo "Attempt $i/60..."
+          sleep 2
+        done
+
+  post_build:
+    commands:
+      - echo "Post-build phase completed on $(date)"
+      - echo "=========================================="
+      - echo "✅ BUILD SUMMARY"
+      - echo "=========================================="
+      - echo "Upstream Version - $UPSTREAM_VERSION"
+      - echo "Commit SHA - $SHORT_SHA"
+      - echo "Build Date - $BUILD_DATE"
+      - echo ""
+      - echo "Docker Images Published"
+      - echo "  EE - $ECR_REPOSITORY_URI $EE_TAG"
+      - echo "  EE - $ECR_REPOSITORY_URI latest-ee"
+      - echo "  OSS - $ECR_REPOSITORY_URI $OSS_TAG"
+      - echo "  OSS - $ECR_REPOSITORY_URI latest-oss"
+      - echo ""
+      - echo "Pull images with"
+      - echo "  docker pull $ECR_REPOSITORY_URI latest-ee"
+      - echo "  docker pull $ECR_REPOSITORY_URI latest-oss"
+      - echo "=========================================="
+
+cache:
+  paths:
+    - '/root/.m2/**/*'
+    - '/root/.gitlibs/**/*'
+    - 'node_modules/**/*'
+    - '/root/.cache/yarn/**/*'
+    - '/root/.cache/Cypress/**/*'
+
+artifacts:
+  files:
+    - '**/*'
+  name: build-output
