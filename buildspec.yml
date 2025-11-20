@@ -43,20 +43,26 @@ phases:
       # Extract version information from git
       - echo "Extracting version information..."
       - |
-        # Get latest Metabase release from GitHub API
-        echo "Fetching latest Metabase version from GitHub..."
-        UPSTREAM_VERSION=$(curl -s https://api.github.com/repos/metabase/metabase/releases/latest | jq -r '.tag_name')
-        if [ -z "$UPSTREAM_VERSION" ] || [ "$UPSTREAM_VERSION" = "null" ]; then
-          echo "Failed to get version from GitHub API, falling back to git tags..."
-          git remote add upstream https://github.com/metabase/metabase.git 2>/dev/null || true
-          git fetch upstream --tags
-          # Get latest v0.x tag (Metabase's main versioning)
-          UPSTREAM_VERSION=$(git tag -l | grep -E '^v0\.[0-9]+\.[0-9]+(\.[0-9]+)?$' | sort -V | tail -1)
+        # Check if METABASE_VERSION is set (from env vars or version-specific branch)
+        if [ -n "$METABASE_VERSION" ]; then
+          echo "✅ Using specified Metabase version: $METABASE_VERSION"
+          UPSTREAM_VERSION="$METABASE_VERSION"
+        else
+          # Get latest Metabase release from GitHub API
+          echo "Fetching latest Metabase version from GitHub..."
+          UPSTREAM_VERSION=$(curl -s https://api.github.com/repos/metabase/metabase/releases/latest | jq -r '.tag_name')
+          if [ -z "$UPSTREAM_VERSION" ] || [ "$UPSTREAM_VERSION" = "null" ]; then
+            echo "Failed to get version from GitHub API, falling back to git tags..."
+            git remote add upstream https://github.com/metabase/metabase.git 2>/dev/null || true
+            git fetch upstream --tags
+            # Get latest v0.x tag (Metabase's main versioning)
+            UPSTREAM_VERSION=$(git tag -l | grep -E '^v0\.[0-9]+\.[0-9]+(\.[0-9]+)?$' | sort -V | tail -1)
+          fi
+          if [ -z "$UPSTREAM_VERSION" ]; then
+            UPSTREAM_VERSION="v0.0.0"
+          fi
+          echo "Upstream Metabase version: $UPSTREAM_VERSION"
         fi
-        if [ -z "$UPSTREAM_VERSION" ]; then
-          UPSTREAM_VERSION="v0.0.0"
-        fi
-        echo "Upstream Metabase version: $UPSTREAM_VERSION"
 
         # Get short commit SHA
         SHORT_SHA=$(git rev-parse --short=7 HEAD)
