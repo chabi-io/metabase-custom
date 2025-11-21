@@ -93,18 +93,46 @@ export function ExtendedDateFilterPicker({
       // Value prop has a selection - initialize only if value changed
       if (valueChanged && !initializedFromValueRef.current) {
         const [startDate, endDate] = value.values;
-        selectCustomRange(startDate, endDate, "Selected Range");
 
-        // Set fiscal year to the year containing the start date
+        // Find which fiscal year and periods this date range covers
+        let targetYear: number | null = null;
+        let matchingPeriods: number[] = [];
+
         for (const [year, yearData] of fiscalData.years.entries()) {
+          // Check if this date range is in this fiscal year
           if (
             startDate >= yearData.startDate &&
             startDate <= yearData.endDate
           ) {
+            targetYear = year;
+
+            // Find all periods that overlap with this date range
+            matchingPeriods = yearData.periods
+              .filter(
+                (p) =>
+                  // Period overlaps if: period.start <= range.end && period.end >= range.start
+                  p.startDate <= endDate && p.endDate >= startDate,
+              )
+              .map((p) => p.id);
+
+            // If we found clean period boundaries, use selectPeriods to preserve metadata
+            if (matchingPeriods.length > 0) {
+              selectPeriods(matchingPeriods, yearData.periods);
+            } else {
+              // Fallback to custom range
+              selectCustomRange(startDate, endDate, "Selected Range");
+            }
+
             setFiscalYear(year);
             break;
           }
         }
+
+        // If no fiscal year found, still set the range
+        if (targetYear === null) {
+          selectCustomRange(startDate, endDate, "Selected Range");
+        }
+
         initializedFromValueRef.current = true;
       }
     } else if (valueCleared) {
@@ -117,7 +145,7 @@ export function ExtendedDateFilterPicker({
     }
 
     prevValueRef.current = value;
-  }, [value, fiscalData, selectCustomRange, clearSelection]);
+  }, [value, fiscalData, selectCustomRange, selectPeriods, clearSelection]);
 
   // Get current fiscal year data
   const currentYearData = fiscalData?.years.get(fiscalYear);
@@ -264,7 +292,11 @@ export function ExtendedDateFilterPicker({
         fiscalData={fiscalData}
         onSelectPeriods={selectPeriods}
         onSelectWeekRange={selectWeekRange}
-        onSelectQuick={selectQuick}
+        onSelectQuick={(...args) => {
+          // Switch to Year view when using quick actions so user can see full selection
+          setViewMode("Year");
+          selectQuick(...args);
+        }}
         onClearSelection={handleClear}
         onApply={handleApply}
         applyButtonLabel={applyButtonLabel}

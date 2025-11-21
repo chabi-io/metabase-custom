@@ -79,19 +79,20 @@
   border-right: none;
 }
 
-.dayCell:hover {
-  background: var(--mb-color-bg-light);
-}
-
 .dayCellSelected {
   background: var(--mb-color-brand);
   color: white;
   font-weight: 600;
 }
 
+.dayCell:hover {
+  background: var(--mb-color-bg-light);
+  color: var(--mb-color-text-dark);
+}
+
 .dayCellSelected:hover {
   background: var(--mb-color-brand-dark);
-  color: white;
+  color: white !important;
 }
 
 .dayCellToday {

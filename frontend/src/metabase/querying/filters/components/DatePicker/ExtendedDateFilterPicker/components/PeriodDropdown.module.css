@@ -17,6 +17,8 @@
 
 .periodItem:hover {
   background: var(--mb-color-bg-light);
+  /* Ensure text colors are preserved on hover */
+  color: var(--mb-color-text-dark);
 }
 
 .periodItem:last-child {
