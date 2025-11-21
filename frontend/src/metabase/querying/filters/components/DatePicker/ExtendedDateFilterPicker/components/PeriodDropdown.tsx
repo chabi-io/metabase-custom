@@ -31,11 +31,42 @@ export function PeriodDropdown({
       e.stopPropagation();
     }
 
-    const newSelection = selectedPeriodIds.includes(periodId)
-      ? selectedPeriodIds.filter((id) => id !== periodId)
-      : [...selectedPeriodIds, periodId].sort((a, b) => a - b);
+    const allPeriodIds = allPeriods.map((p) => p.id).sort((a, b) => a - b);
+    const isCurrentlySelected = selectedPeriodIds.includes(periodId);
 
-    onSelect(newSelection);
+    if (isCurrentlySelected) {
+      // UNCHECKING a period: truncate range at this point
+      // If unchecking period 4 from [1,2,3,4,5,6], result should be [1,2,3]
+      const sortedSelection = [...selectedPeriodIds].sort((a, b) => a - b);
+      const uncheckedIdx = sortedSelection.indexOf(periodId);
+
+      // Keep only periods before the unchecked one
+      const newSelection = sortedSelection.slice(0, uncheckedIdx);
+      onSelect(newSelection);
+    } else {
+      // CHECKING a period: auto-fill range to this period
+      if (selectedPeriodIds.length === 0) {
+        // First selection: just add this period
+        onSelect([periodId]);
+      } else {
+        // Find the min and max of current selection
+        const currentMin = Math.min(...selectedPeriodIds);
+        const currentMax = Math.max(...selectedPeriodIds);
+
+        // Determine the new range
+        const newMin = Math.min(currentMin, periodId);
+        const newMax = Math.max(currentMax, periodId);
+
+        // Get all period IDs in the range [newMin, newMax]
+        const minIdx = allPeriodIds.indexOf(newMin);
+        const maxIdx = allPeriodIds.indexOf(newMax);
+
+        if (minIdx !== -1 && maxIdx !== -1) {
+          const rangePeriodIds = allPeriodIds.slice(minIdx, maxIdx + 1);
+          onSelect(rangePeriodIds);
+        }
+      }
+    }
   };
 
   const selectAll = (e?: React.MouseEvent) => {

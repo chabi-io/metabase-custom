@@ -84,11 +84,21 @@ function parseQueryResult(result: any): FiscalCalendarRow[] {
   }
 
   // Transform rows into typed objects
-  return data.rows.map((row: any[]) => ({
-    YEAR: row[colMap.get("YEAR")!],
-    START_DATE: row[colMap.get("START_DATE")!],
-    END_DATE: row[colMap.get("END_DATE")!],
-    PERIOD: row[colMap.get("PERIOD")!],
-    QUARTER: row[colMap.get("QUARTER")!],
-  }));
+  return data.rows.map((row: any[]) => {
+    // Parse YEAR: remove comma if present and convert to number
+    const yearStr = String(row[colMap.get("YEAR")!]);
+    const year = parseInt(yearStr.replace(/,/g, ""), 10);
+
+    // Parse PERIOD and QUARTER: convert to numbers
+    const period = parseInt(String(row[colMap.get("PERIOD")!]), 10);
+    const quarter = parseInt(String(row[colMap.get("QUARTER")!]), 10);
+
+    return {
+      YEAR: year,
+      START_DATE: row[colMap.get("START_DATE")!],
+      END_DATE: row[colMap.get("END_DATE")!],
+      PERIOD: period,
+      QUARTER: quarter,
+    };
+  });
 }
