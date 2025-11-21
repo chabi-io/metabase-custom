@@ -16,11 +16,11 @@ NC='\033[0m' # No Color
 FEATURE_TAG="extended-date-picker-v1.0"
 # Note: Cherry-pick feature code commits (5), not the doc/script commit
 FEATURE_COMMITS=(
-    "934e051af0"  # Add extended fiscal calendar date picker
-    "8ea1640bb6"  # Fix type issues
-    "158bc78c2e"  # Register widget
-    "b25db2534d"  # Add parameter type
-    "be922aa77b"  # Fix bugs and improve UX (type parsing, hover states, period persistence)
+    "52b163a8c9"  # Add extended fiscal calendar date picker
+    "cf76f271d0"  # Fix type issues
+    "9e4d509e93"  # Register widget
+    "1b40748199"  # Add parameter type
+    "b18d84706a"  # Fix bugs and improve UX (type parsing, hover states, period persistence)
 )
 
 print_header() {
@@ -175,7 +175,7 @@ print_info "Step 4/6: Applying extended date picker feature..."
 if [ "$DRY_RUN" = false ]; then
     # Try cherry-picking all commits at once
     if git cherry-pick "${FEATURE_COMMITS[@]}" 2>&1; then
-        print_success "Applied all 4 feature commits successfully"
+        print_success "Applied all 5 feature commits successfully"
     else
         print_error "Cherry-pick failed. Conflicts need manual resolution."
         print_info "Conflicted files:"
