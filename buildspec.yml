@@ -41,15 +41,13 @@ phases:
       - ls -la
 
       # Extract version information from git
-      - echo "Checking for branch-specific version file..."
-      - |
-        if [ -f ".metabase-version" ]; then
-          source .metabase-version
-          export METABASE_VERSION
-          echo "✅ Loaded version from .metabase-version: $METABASE_VERSION"
-        fi
       - echo "Extracting version information..."
       - |
+        # Set version for this branch
+        METABASE_VERSION=v0.56.9
+        export METABASE_VERSION
+        echo "✅ Using branch-specific version: $METABASE_VERSION"
+
         # Check if METABASE_VERSION is set (from env vars or version-specific branch)
         if [ -n "$METABASE_VERSION" ]; then
           echo "✅ Using specified Metabase version: $METABASE_VERSION"
