@@ -41,6 +41,12 @@ phases:
       - ls -la
 
       # Extract version information from git
+      - echo "Checking for branch-specific version file..."
+      - |
+        if [ -f ".metabase-version" ]; then
+          source .metabase-version
+          echo "✅ Loaded version from .metabase-version: $METABASE_VERSION"
+        fi
       - echo "Extracting version information..."
       - |
         # Check if METABASE_VERSION is set (from env vars or version-specific branch)
