@@ -45,6 +45,7 @@ phases:
       - |
         if [ -f ".metabase-version" ]; then
           source .metabase-version
+          export METABASE_VERSION
           echo "✅ Loaded version from .metabase-version: $METABASE_VERSION"
         fi
       - echo "Extracting version information..."
