@@ -139,8 +139,8 @@ export function useDateSelection(): UseDateSelectionResult {
 
         // If today falls in the viewed year, use those
         if (week?.fiscalYear === targetFiscalYear) {
-          referenceWeek = week;
-          referencePeriod = period;
+          referenceWeek = week ?? undefined;
+          referencePeriod = period ?? undefined;
         } else {
           // Otherwise, default to first week/period of the viewed year
           referenceWeek = yearData.weeks[0];
