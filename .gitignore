@@ -163,3 +163,8 @@ CLAUDE.local.md
 
 /logs
 /.clojure-mcp
+.tsbuildinfo
+resources/frontend_client/app/embedding-sdk.js
+
+# Fiscal Calendar test database
+fiscal-calendar.db

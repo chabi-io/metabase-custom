@@ -145,6 +145,16 @@ export const PARAMETER_OPERATOR_TYPES = {
       },
     },
     {
+      type: "date/extended-range",
+      operator: "extended-range",
+      get name() {
+        return t`Extended Date Range`;
+      },
+      get description() {
+        return t`Fiscal calendar with week/period selection`;
+      },
+    },
+    {
       type: "date/relative",
       operator: "relative",
       get name() {

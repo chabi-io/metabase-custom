@@ -1,0 +1,121 @@
+/* Week Row - Fiscal calendar week with 7 day cells */
+
+.weekRow {
+  display: grid;
+  grid-template-columns: 60px repeat(7, 1fr);
+  border-bottom: 1px solid var(--mb-color-border);
+  transition: background-color 0.15s ease;
+}
+
+.weekRow:last-child {
+  border-bottom: none;
+}
+
+.weekRowHovered {
+  background: var(--mb-color-bg-light);
+}
+
+.weekRowSelected {
+  background: var(--mb-color-brand-light);
+}
+
+/* Week number cell */
+.weekNumber {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: var(--mb-color-bg-light);
+  border-right: 1px solid var(--mb-color-border);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.weekNumber:hover {
+  background: var(--mb-color-brand-light);
+}
+
+.weekNumberSelected {
+  background: var(--mb-color-brand);
+  color: white;
+}
+
+.weekNumberSelected:hover {
+  background: var(--mb-color-brand-dark);
+}
+
+.weekNum {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.periodLabel {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+/* Day cells */
+.dayCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--mb-color-bg-white);
+  color: var(--mb-color-text-dark);
+  transition: all 0.15s ease;
+  user-select: none;
+  border-right: 1px solid var(--mb-color-border);
+}
+
+.dayCell:last-child {
+  border-right: none;
+}
+
+.dayCellSelected {
+  background: var(--mb-color-brand);
+  color: white;
+  font-weight: 600;
+}
+
+.dayCell:hover {
+  background: var(--mb-color-bg-light);
+  color: var(--mb-color-text-dark);
+}
+
+.dayCellSelected:hover {
+  background: var(--mb-color-brand-dark);
+  color: white !important;
+}
+
+.dayCellToday {
+  position: relative;
+  font-weight: 600;
+}
+
+.dayCellToday::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background: var(--mb-color-brand);
+  border-radius: 50%;
+}
+
+.dayCellSelected.dayCellToday::after {
+  background: white;
+}
+
+.dayCellDragging {
+  cursor: crosshair;
+}
