@@ -14,12 +14,13 @@ NC='\033[0m' # No Color
 
 # Feature details
 FEATURE_TAG="extended-date-picker-v1.0"
-# Note: Only cherry-pick the feature code commits (4), not the doc/script commit
+# Note: Cherry-pick feature code commits (5), not the doc/script commit
 FEATURE_COMMITS=(
     "934e051af0"  # Add extended fiscal calendar date picker
     "8ea1640bb6"  # Fix type issues
     "158bc78c2e"  # Register widget
     "b25db2534d"  # Add parameter type
+    "be922aa77b"  # Fix bugs and improve UX (type parsing, hover states, period persistence)
 )
 
 print_header() {
